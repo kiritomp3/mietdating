@@ -1,7 +1,7 @@
 import os
 
 # Токен бота (его лучше хранить в .env)
-BOT_TOKEN = "7000170472:AAEmxmBD3xVbnWMpq6VS5lbGP4pVssxm1AM"
+BOT_TOKEN = ""
 
 # Данные для подключения к PostgreSQL
 DB_USER = "postgres"
