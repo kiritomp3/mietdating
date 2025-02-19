@@ -1,4 +1,7 @@
 from db import Base, engine
-import models  # Импортируем новую таблицу
+import models
 
-Base.metadata.create_all(engine)  # Создаём только недостающие таблицы
+# Удаляем все таблицы
+Base.metadata.drop_all(engine)
+# Создаем заново
+Base.metadata.create_all(engine)

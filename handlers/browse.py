@@ -4,8 +4,10 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 from db import SessionLocal
-from models import User, Like
+from models import User, Like, ViewedProfile
 from keyboards import get_browse_keyboard, main_menu
+from datetime import datetime, timedelta
+from sqlalchemy import and_
 
 print("📌 browse.py загружен!")
 router = Router()
@@ -16,11 +18,41 @@ logger = logging.getLogger(__name__)
 # Функция для поиска случайной анкеты
 def get_random_profile(exclude_user_id: int):
     with SessionLocal() as db:
+        five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+
+        recently_viewed = db.query(ViewedProfile.target_id).filter(
+            and_(
+                ViewedProfile.user_id == exclude_user_id,
+                ViewedProfile.viewed_at >= five_minutes_ago
+            )
+        ).subquery()
+
         user = db.query(User).filter(
-            User.id != exclude_user_id,
-            User.is_active == True
+            and_(
+                User.id != exclude_user_id,
+                User.is_active == True,
+                ~User.id.in_(recently_viewed)
+            )
         ).order_by(func.random()).first()
-        return user
+
+        if user:
+            # Сохраняем просмотр
+            viewed = ViewedProfile(user_id=exclude_user_id, target_id=user.id)
+            db.add(viewed)
+            db.commit()
+
+            # Возвращаем данные как словарь
+            return {
+                "id": user.id,
+                "name": user.name,
+                "birthdate": user.birthdate,
+                "city": user.city,
+                "description": user.description,
+                "photo_id": user.photo_id
+            }
+
+    return None  # Если нет доступных анкет
+
 
 # Функция сохранения лайка в БД
 def save_like(user_id: int, liked_user_id: int):
@@ -51,15 +83,15 @@ async def browse_profiles(message: types.Message):
     if user:
         profile_text = (
             f"📜 Анкета:\n\n"
-            f"👤 Имя: {user.name}\n"
-            f"🎂 Дата рождения: {user.birthdate}\n"
-            f"🏙 Город: {user.city}\n"
-            f"📝 Описание: {user.description if user.description else '—'}"
+            f"👤 Имя: {user['name']}\n"
+            f"🎂 Дата рождения: {user['birthdate']}\n"
+            f"🏙 Город: {user['city']}\n"
+            f"📝 Описание: {user['description'] if user['description'] else '—'}"
         )
-        keyboard = get_browse_keyboard(user.id)  # Теперь передаем ID анкеты в кнопку!
+        keyboard = get_browse_keyboard(user["id"])
 
-        if user.photo_id:
-            await message.answer_photo(photo=user.photo_id, caption=profile_text, reply_markup=keyboard)
+        if user["photo_id"]:
+            await message.answer_photo(photo=user["photo_id"], caption=profile_text, reply_markup=keyboard)
         else:
             await message.answer(profile_text, reply_markup=keyboard)
     else:
@@ -72,12 +104,6 @@ async def like_profile(callback: CallbackQuery):
     target_user_id = int(callback.data.split(":")[1])  # Получаем ID анкеты из callback_data
 
     with SessionLocal() as db:
-        # Проверяем, лайкал ли этот пользователь уже
-        existing_like = db.query(Like).filter_by(user_id=user_id, liked_user_id=target_user_id).first()
-        if existing_like:
-            await callback.answer("Вы уже лайкали эту анкету!")
-            return
-        
         # Добавляем лайк в БД
         like = Like(user_id=user_id, liked_user_id=target_user_id)
         db.add(like)
@@ -86,15 +112,20 @@ async def like_profile(callback: CallbackQuery):
         # Проверяем взаимный лайк
         mutual_like = db.query(Like).filter_by(user_id=target_user_id, liked_user_id=user_id).first()
         if mutual_like:
-            like.is_mutual = True
-            mutual_like.is_mutual = True
+            # Удаляем лайки из БД
+            db.delete(like)
+            db.delete(mutual_like)
             db.commit()
 
-            # Взаимный лайк — отправляем username только лайкнутого пользователя
+            # Получаем информацию о пользователях
             target_user = db.query(User).filter_by(id=target_user_id).first()
+            user = db.query(User).filter_by(id=user_id).first()
 
-            username_text = f"👤 Свяжитесь с пользователем: @{target_user.username}"
+            # Отправляем сообщение о совпадении
+            username_text = f"🎉 У вас взаимный лайк!\n👤 Свяжитесь с пользователем: @{target_user.username}"
             await callback.bot.send_message(user_id, username_text)
+
+            await callback.bot.send_message(target_user_id, f"🎉 У вас взаимный лайк!\n👤 Свяжитесь с пользователем: @{user.username}")
         else:
             # Отправляем лайкнутому пользователю анкету того, кто его лайкнул с кнопками "Лайк" и "Дизлайк"
             liker = db.query(User).filter_by(id=user_id).first()
@@ -104,18 +135,17 @@ async def like_profile(callback: CallbackQuery):
                             f"🏙 Город: {liker.city}\n"
                             f"📝 Описание: {liker.description if liker.description else '—'}")
 
-            keyboard = get_browse_keyboard(liker.id)  # Кнопки "Лайк" и "Дизлайк"
+            keyboard = get_browse_keyboard(liker.id)
 
             if liker.photo_id:
                 await callback.bot.send_photo(chat_id=target_user_id, photo=liker.photo_id, caption=profile_text, reply_markup=keyboard)
             else:
                 await callback.bot.send_message(chat_id=target_user_id, text=profile_text, reply_markup=keyboard)
 
+            # Отправляем новую анкету только если лайк НЕ был взаимным
+            await send_new_profile(callback)
+
     await callback.answer("❤️ Лайк отправлен!")
-
-    # Показываем следующую анкету
-    await send_new_profile(callback)
-
 # 💔 Обработчик "Дизлайк"
 @router.callback_query(lambda c: c.data.startswith("dislike:"))
 async def dislike_profile(callback: CallbackQuery):
