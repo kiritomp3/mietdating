@@ -3,8 +3,8 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # Главное меню
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="👀 Смотреть анкеты")],
-        [KeyboardButton(text="📜 Моя анкета")],
+        [KeyboardButton(text="Смотреть анкеты")],
+        [KeyboardButton(text="Моя анкета")],
         [KeyboardButton(text="✏ Изменить анкету")],
         [KeyboardButton(text="🚫 Выключить анкету")],
     ],
@@ -15,6 +15,6 @@ main_menu = ReplyKeyboardMarkup(
 
 def get_browse_keyboard(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like:{user_id}")],
-        [InlineKeyboardButton(text="💔 Дизлайк", callback_data=f"dislike:{user_id}")]
+        [InlineKeyboardButton(text="❤️", callback_data=f"like:{user_id}")],
+        [InlineKeyboardButton(text="👎", callback_data=f"dislike:{user_id}")]
     ])

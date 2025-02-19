@@ -7,7 +7,7 @@ from db import SessionLocal
 from models import User
 from keyboards import main_menu
 from aiogram.types import ReplyKeyboardRemove
-
+from datetime import datetime
 router = Router()
 
 # Настройка логирования
@@ -19,21 +19,27 @@ class EditProfile(StatesGroup):
     choose_field = State()
     new_value = State()
 
+# Вычисляем возраст
+def calculate_age(birthdate):
+    today = datetime.utcnow().date()
+    return today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+
+
 # 📜 Кнопка "Моя анкета"
-@router.message(lambda msg: msg.text == "📜 Моя анкета")
+@router.message(lambda msg: msg.text == "Моя анкета")
 async def my_profile(message: types.Message):
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} запросил свою анкету.")
 
     with SessionLocal() as db:
         user = db.query(User).filter(User.id == user_id).first()
-
+        age = calculate_age(user.birthdate)
         if user:
-            profile_text = (f"📜 Твоя анкета:\n\n"
-                            f"👤 Имя: {user.name}\n"
-                            f"🎂 Дата рождения: {user.birthdate}\n"
-                            f"🏙 Город: {user.city}\n"
-                            f"📝 Описание: {user.description if user.description else '—'}")
+            profile_text = (
+                            f"{user.name},"
+                            f" {age},"
+                            f" {user.city} —"
+                            f" {user.description if user.description else ''}")
             
             if user.photo_id:
                 await message.answer_photo(photo=user.photo_id, caption=profile_text, reply_markup=main_menu)

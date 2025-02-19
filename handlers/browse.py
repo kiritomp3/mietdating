@@ -8,6 +8,7 @@ from models import User, Like, ViewedProfile
 from keyboards import get_browse_keyboard, main_menu
 from datetime import datetime, timedelta
 from sqlalchemy import and_
+from handlers.profile import calculate_age
 
 print("📌 browse.py загружен!")
 router = Router()
@@ -53,40 +54,21 @@ def get_random_profile(exclude_user_id: int):
 
     return None  # Если нет доступных анкет
 
-
-# Функция сохранения лайка в БД
-def save_like(user_id: int, liked_user_id: int):
-    with SessionLocal() as db:
-        # Проверяем, есть ли взаимный лайк
-        existing_like = db.query(Like).filter(
-            Like.user_id == liked_user_id,
-            Like.liked_user_id == user_id
-        ).first()
-
-        if existing_like:
-            existing_like.is_mutual = True
-            db.commit()
-            return True  # Взаимный лайк
-        else:
-            new_like = Like(user_id=user_id, liked_user_id=liked_user_id, is_mutual=False)
-            db.add(new_like)
-            db.commit()
-            return False  # Обычный лайк
-
 # 🔍 Кнопка "Смотреть анкеты"
-@router.message(lambda msg: msg.text == "👀 Смотреть анкеты")
+@router.message(lambda msg: msg.text == "Смотреть анкеты")
 async def browse_profiles(message: types.Message):
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} начал просмотр анкет.")
     
     user = get_random_profile(exclude_user_id=user_id)
+    
     if user:
+        age = calculate_age(user["birthdate"])
         profile_text = (
-            f"📜 Анкета:\n\n"
-            f"👤 Имя: {user['name']}\n"
-            f"🎂 Дата рождения: {user['birthdate']}\n"
-            f"🏙 Город: {user['city']}\n"
-            f"📝 Описание: {user['description'] if user['description'] else '—'}"
+            f"{user['name']}, "
+            f"{age}, "
+            f"{user['city']} — "
+            f"{user['description'] if user['description'] else ''}"
         )
         keyboard = get_browse_keyboard(user["id"])
 
@@ -95,7 +77,7 @@ async def browse_profiles(message: types.Message):
         else:
             await message.answer(profile_text, reply_markup=keyboard)
     else:
-        await message.answer("Нет доступных анкет.", reply_markup=main_menu)
+        await message.answer("Доступные анкеты закончились.", reply_markup=main_menu)
 
 # ❤️ Обработчик "Лайк"
 @router.callback_query(lambda c: c.data.startswith("like:"))
@@ -122,30 +104,33 @@ async def like_profile(callback: CallbackQuery):
             user = db.query(User).filter_by(id=user_id).first()
 
             # Отправляем сообщение о совпадении
-            username_text = f"🎉 У вас взаимный лайк!\n👤 Свяжитесь с пользователем: @{target_user.username}"
+            username_text = f"🎉 У вас новый мэтч!\n @{target_user.username}"
             await callback.bot.send_message(user_id, username_text)
 
-            await callback.bot.send_message(target_user_id, f"🎉 У вас взаимный лайк!\n👤 Свяжитесь с пользователем: @{user.username}")
+            await callback.bot.send_message(target_user_id, f"🎉 У вас новый мэтч!\n@{user.username}")
         else:
             # Отправляем лайкнутому пользователю анкету того, кто его лайкнул с кнопками "Лайк" и "Дизлайк"
             liker = db.query(User).filter_by(id=user_id).first()
-            profile_text = (f"💌 Вы понравились!\n\n"
-                            f"👤 Имя: {liker.name}\n"
-                            f"🎂 Дата рождения: {liker.birthdate}\n"
-                            f"🏙 Город: {liker.city}\n"
-                            f"📝 Описание: {liker.description if liker.description else '—'}")
+            if liker:  # Проверяем, что liker найден
+                age = calculate_age(liker.birthdate)
+                profile_text = (f"💌 Вы понравились!\n\n"
+                                f"{liker.name}, "
+                                f"{age}, "
+                                f"{liker.city}  — "
+                                f"{liker.description if liker.description else ''}")
 
-            keyboard = get_browse_keyboard(liker.id)
+                keyboard = get_browse_keyboard(liker.id)
 
-            if liker.photo_id:
-                await callback.bot.send_photo(chat_id=target_user_id, photo=liker.photo_id, caption=profile_text, reply_markup=keyboard)
-            else:
-                await callback.bot.send_message(chat_id=target_user_id, text=profile_text, reply_markup=keyboard)
+                if liker.photo_id:
+                    await callback.bot.send_photo(chat_id=target_user_id, photo=liker.photo_id, caption=profile_text, reply_markup=keyboard)
+                else:
+                    await callback.bot.send_message(chat_id=target_user_id, text=profile_text, reply_markup=keyboard)
 
             # Отправляем новую анкету только если лайк НЕ был взаимным
             await send_new_profile(callback)
 
     await callback.answer("❤️ Лайк отправлен!")
+
 # 💔 Обработчик "Дизлайк"
 @router.callback_query(lambda c: c.data.startswith("dislike:"))
 async def dislike_profile(callback: CallbackQuery):
@@ -153,7 +138,7 @@ async def dislike_profile(callback: CallbackQuery):
     target_id = int(callback.data.split(":")[1])  # Получаем ID анкеты
 
     logger.info(f"Пользователь {user_id} поставил дизлайк анкете {target_id}.")
-    await callback.answer("💔 Дизлайк отправлен!")
+    await callback.answer("💔")
     
     await send_new_profile(callback)
 
@@ -161,20 +146,19 @@ async def dislike_profile(callback: CallbackQuery):
 async def send_new_profile(callback: CallbackQuery):
     user_id = callback.from_user.id
     user = get_random_profile(exclude_user_id=user_id)
-
     if user:
+        age = calculate_age(user["birthdate"])
         profile_text = (
-            f"📜 Анкета:\n\n"
-            f"👤 Имя: {user.name}\n"
-            f"🎂 Дата рождения: {user.birthdate}\n"
-            f"🏙 Город: {user.city}\n"
-            f"📝 Описание: {user.description if user.description else '—'}"
+            f"{user['name']}, "
+            f"{age}, "
+            f"{user['city']}  — "
+            f"{user['description'] if user['description'] else ''}"
         )
-        keyboard = get_browse_keyboard(user.id)  # Передаем ID анкеты в кнопку
+        keyboard = get_browse_keyboard(user["id"])  # Передаем ID анкеты в кнопку
 
-        if user.photo_id:
-            await callback.message.answer_photo(photo=user.photo_id, caption=profile_text, reply_markup=keyboard)
+        if user["photo_id"]:
+            await callback.message.answer_photo(photo=user["photo_id"], caption=profile_text, reply_markup=keyboard)
         else:
             await callback.message.answer(profile_text, reply_markup=keyboard)
     else:
-        await callback.message.answer("Нет больше анкет.", reply_markup=main_menu)
+        await callback.message.answer("Доступные анкеты закончились.", reply_markup=main_menu)
