@@ -1,4 +1,4 @@
 from db import Base, engine
-from models import ViewedProfile  # Импортируем новую таблицу
+import models  # Импортируем новую таблицу
 
 Base.metadata.create_all(engine)  # Создаём только недостающие таблицы

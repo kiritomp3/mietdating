@@ -12,10 +12,9 @@ main_menu = ReplyKeyboardMarkup(
 )
 
 # Клавиатура для просмотра анкет
-def get_browse_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="❤️ Лайк", callback_data="like"),
-             InlineKeyboardButton(text="💔 Дизлайк", callback_data="dislike")],
-        ]
-    )
+
+def get_browse_keyboard(user_id: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like:{user_id}")],
+        [InlineKeyboardButton(text="💔 Дизлайк", callback_data=f"dislike:{user_id}")]
+    ])

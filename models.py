@@ -1,8 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, DateTime, func
 from sqlalchemy.orm import relationship
-
-from sqlalchemy.orm import declarative_base
-Base = declarative_base()
+from db import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -27,3 +25,12 @@ class ViewedProfile(Base):
 
     user = relationship("User", foreign_keys=[user_id])
     target = relationship("User", foreign_keys=[target_id])
+
+
+class Like(Base):
+    __tablename__ = "likes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    liked_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_mutual = Column(Boolean, default=False)

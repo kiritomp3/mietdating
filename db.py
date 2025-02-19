@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
 # Данные для подключения
 DB_USER = "postgres"
@@ -16,3 +17,6 @@ engine = create_engine(DATABASE_URL, echo=True)
 
 # Создаём сессию
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+# Создаём базовый класс для моделей
+Base = declarative_base()
