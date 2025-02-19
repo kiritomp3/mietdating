@@ -16,7 +16,7 @@ router = Router()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Функция для поиска случайной анкеты
+
 def get_random_profile(exclude_user_id: int):
     with SessionLocal() as db:
         five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
@@ -28,21 +28,31 @@ def get_random_profile(exclude_user_id: int):
             )
         ).subquery()
 
+        count = db.query(User.id).filter(
+            and_(
+                User.id != exclude_user_id,
+                User.is_active == True,
+                ~User.id.in_(recently_viewed)
+            )
+        ).count()
+
+        if count == 0:
+            return None
+
+        random_offset = func.floor(func.random() * count)
         user = db.query(User).filter(
             and_(
                 User.id != exclude_user_id,
                 User.is_active == True,
                 ~User.id.in_(recently_viewed)
             )
-        ).order_by(func.random()).first()
+        ).offset(random_offset).limit(1).first()
 
         if user:
-            # Сохраняем просмотр
             viewed = ViewedProfile(user_id=exclude_user_id, target_id=user.id)
             db.add(viewed)
             db.commit()
 
-            # Возвращаем данные как словарь
             return {
                 "id": user.id,
                 "name": user.name,
@@ -51,8 +61,7 @@ def get_random_profile(exclude_user_id: int):
                 "description": user.description,
                 "photo_id": user.photo_id
             }
-
-    return None  # Если нет доступных анкет
+    return None
 
 # 🔍 Кнопка "Смотреть анкеты"
 @router.message(lambda msg: msg.text == "Смотреть анкеты")
