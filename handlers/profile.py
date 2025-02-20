@@ -1,13 +1,14 @@
 import logging
+import sqlite3
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from db import SessionLocal
-from models import User
+from db import DATABASE_PATH, save_user_photo, get_photo
 from keyboards import main_menu
 from aiogram.types import ReplyKeyboardRemove
 from datetime import datetime
+
 router = Router()
 
 # Настройка логирования
@@ -21,9 +22,11 @@ class EditProfile(StatesGroup):
 
 # Вычисляем возраст
 def calculate_age(birthdate):
+    if isinstance(birthdate, str):
+        birthdate = datetime.strptime(birthdate, "%Y-%m-%d").date()
+
     today = datetime.utcnow().date()
     return today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
-
 
 # 📜 Кнопка "Моя анкета"
 @router.message(lambda msg: msg.text == "Моя анкета")
@@ -31,23 +34,26 @@ async def my_profile(message: types.Message):
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} запросил свою анкету.")
 
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.id == user_id).first()
-        age = calculate_age(user.birthdate)
-        if user:
-            profile_text = (
-                            f"{user.name},"
-                            f" {age},"
-                            f" {user.city} —"
-                            f" {user.description if user.description else ''}")
-            
-            if user.photo_id:
-                await message.answer_photo(photo=user.photo_id, caption=profile_text, reply_markup=main_menu)
-            else:
-                await message.answer(profile_text, reply_markup=main_menu)
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT first_name, date_of_birth, city, biography FROM users WHERE user_tg_id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user:
+        age = calculate_age(user[1]) if user[1] else "Не указан"
+        profile_text = (
+            f"{user[0]}, {age}, {user[2] if user[2] else 'Не указан'} — {user[3] if user[3] else 'Описание отсутствует'}"
+        )
+        photo = get_photo(user_id)
+        if photo:
+            await message.answer_photo(photo=photo, caption=profile_text, reply_markup=main_menu)
         else:
-            logger.warning(f"Пользователь {user_id} пытался получить анкету, но она не найдена.")
-            await message.answer("Анкета не найдена. Используй /start для создания анкеты.")
+            await message.answer(profile_text, reply_markup=main_menu)
+    else:
+        logger.warning(f"Пользователь {user_id} пытался получить анкету, но она не найдена.")
+        await message.answer("Анкета не найдена. Используй /start для создания анкеты.")
+
 
 # 🚫 Кнопка "Выключить анкету"
 @router.message(lambda msg: msg.text == "🚫 Выключить анкету")
@@ -55,17 +61,13 @@ async def disable_profile(message: types.Message):
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} выключает свою анкету.")
 
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.id == user_id).first()
-        
-        if user:
-            user.is_active = False
-            db.commit()
-            logger.info(f"Анкета пользователя {user_id} успешно отключена.")
-            await message.answer("🔕 Твоя анкета отключена. Теперь тебя не смогут найти в поиске.", reply_markup=ReplyKeyboardRemove())
-        else:
-            logger.warning(f"Пользователь {user_id} пытался отключить анкету, но она не найдена.")
-            await message.answer("Анкета не найдена. Используй /start для создания анкеты.")
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_active = 0 WHERE user_tg_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    await message.answer("🔕 Твоя анкета отключена. Теперь тебя не смогут найти в поиске.", reply_markup=ReplyKeyboardRemove())
 
 # ✏ Кнопка "Изменить анкету"
 @router.message(lambda msg: msg.text == "✏ Изменить анкету")
@@ -91,11 +93,11 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
     logger.info(f"Пользователь {user_id} выбрал изменение параметра: {message.text}")
 
     field_mapping = {
-        "👤 Имя": "name",
-        "🎂 Дата рождения": "birthdate",
+        "👤 Имя": "first_name",
+        "🎂 Дата рождения": "date_of_birth",
         "🏙 Город": "city",
-        "🖼 Фото": "photo_id",
-        "📝 Описание": "description"
+        "🖼 Фото": "photo",
+        "📝 Описание": "biography"
     }
 
     if message.text == "❌ Отмена":
@@ -130,34 +132,31 @@ async def process_new_value(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
     field = user_data["field"]
 
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.id == user_id).first()
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
 
-        if not user:
-            logger.warning(f"Пользователь {user_id} пытался изменить анкету, но она не найдена.")
-            await message.answer("Анкета не найдена. Используй /start для её создания.")
-            await state.clear()
+    if field == "date_of_birth":
+        try:
+            new_value = datetime.strptime(new_value, "%Y-%m-%d").date()
+        except ValueError:
+            logger.error(f"Пользователь {user_id} ввел некорректную дату: {new_value}")
+            await message.answer("Некорректный формат даты! Введи в формате ГГГГ-ММ-ДД (например, 2000-05-15).")
             return
 
-        if field == "birthdate":
-            try:
-                from datetime import datetime
-                new_value = datetime.strptime(new_value, "%Y-%m-%d").date()
-            except ValueError:
-                logger.error(f"Пользователь {user_id} ввел некорректную дату: {new_value}")
-                await message.answer("Некорректный формат даты! Введи в формате ГГГГ-ММ-ДД (например, 2000-05-15).")
-                return
+    if field == "photo":
+        if not message.photo:
+            logger.warning(f"Пользователь {user_id} не отправил фото при изменении фото.")
+            await message.answer("Пожалуйста, отправь фото.")
+            return
+        new_value = message.photo[-1].file_id
+        save_user_photo(user_id, new_value)
+        await message.answer("✅ Фото успешно обновлено!", reply_markup=main_menu)
+    else:
+        cursor.execute(f"UPDATE users SET {field} = ? WHERE user_tg_id = ?", (new_value, user_id))
+        conn.commit()
+        conn.close()
 
-        if field == "photo_id":
-            if not message.photo:
-                logger.warning(f"Пользователь {user_id} не отправил фото при изменении фото.")
-                await message.answer("Пожалуйста, отправь фото.")
-                return
-            new_value = message.photo[-1].file_id
-
-        setattr(user, field, new_value)
-        db.commit()
         logger.info(f"Пользователь {user_id} успешно изменил {field} на {new_value}")
+        await message.answer("✅ Анкета успешно обновлена!", reply_markup=main_menu)
 
-    await message.answer("✅ Анкета успешно обновлена!", reply_markup=main_menu)
     await state.clear()
