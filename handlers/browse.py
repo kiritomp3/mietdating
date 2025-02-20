@@ -9,6 +9,10 @@ from keyboards import get_browse_keyboard, main_menu
 from datetime import datetime, timedelta
 from sqlalchemy import and_
 from handlers.profile import calculate_age
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+
 
 print("📌 browse.py загружен!")
 router = Router()
@@ -150,6 +154,69 @@ async def dislike_profile(callback: CallbackQuery):
     await callback.answer("💔")
     
     await send_new_profile(callback)
+
+class SpamState(StatesGroup):
+    waiting_for_text = State()
+
+
+#Обработчик спам кнопки
+@router.callback_query(lambda c: c.data.startswith("spam:"))
+async def spam_profile(callback: CallbackQuery, state: FSMContext):
+    """Обработчик нажатия кнопки 'spam'"""
+    user_id = callback.from_user.id
+    target_user_id = int(callback.data.split(":")[1])  # ID анкеты
+
+    # Сохраняем ID получателя в FSM-состоянии
+    await state.update_data(target_user_id=target_user_id)
+
+    await callback.message.answer("📩 Введите текст, который хотите отправить пользователю:")
+    await state.set_state(SpamState.waiting_for_text)
+
+    await callback.answer()  # Закрываем callback-запрос
+
+@router.message(SpamState.waiting_for_text)
+async def send_spam_message(message: types.Message, state: FSMContext):
+    """Получение текста от пользователя и отправка 'spam' сообщения"""
+    user_id = message.from_user.id
+    user_text = message.text  # Получаем текст от пользователя
+
+    data = await state.get_data()
+    target_user_id = data.get("target_user_id")  # Получаем ID получателя
+
+    with SessionLocal() as db:
+        sender = db.query(User).filter_by(id=user_id).first()
+        receiver = db.query(User).filter_by(id=target_user_id).first()
+
+        if not sender or not receiver:
+            await message.answer("⚠ Ошибка: пользователь не найден.")
+            await state.clear()
+            return
+
+        age = calculate_age(sender.birthdate)
+        profile_text = (f"🌞 Вы понравились:\n\n"
+                        f"{sender.name}, {age}, {sender.city}\n"
+                        f"{sender.description if sender.description else ''}\n\n"
+                        f"💬 Сообщение: {user_text}")
+
+        keyboard = get_browse_keyboard(sender.id)  # Кнопки "Лайк" и "Дизлайк"
+
+        # Отправляем анкету + сообщение
+        if sender.photo_id:
+            await message.bot.send_photo(chat_id=target_user_id, 
+                                         photo=sender.photo_id, 
+                                         caption=profile_text, 
+                                         reply_markup=keyboard)
+        else:
+            await message.bot.send_message(chat_id=target_user_id, 
+                                           text=profile_text, 
+                                           reply_markup=keyboard)
+
+    await message.answer("✅ Сообщение отправлено!")
+
+    # ✅ Отправляем следующую анкету после отправки "spam"
+    await send_new_profile(message)
+
+    await state.clear()
 
 # Функция для отправки новой анкеты
 async def send_new_profile(callback: CallbackQuery):
