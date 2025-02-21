@@ -81,7 +81,7 @@ async def like_profile_callback(callback: CallbackQuery):
             else:
                 await callback.bot.send_message(chat_id=target_user_id, text=profile_text, reply_markup=keyboard)
     conn.close()
-    
+
     await callback.answer("❤️ Лайк отправлен!")
     await send_new_profile(callback)
 
@@ -106,11 +106,41 @@ async def spam_profile(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     target_user_id = int(callback.data.split(":")[1])  # ID анкеты
 
-    # Сохраняем ID получателя в FSM-состоянии
-    await state.update_data(target_user_id=target_user_id)
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
 
-    await callback.message.answer("📩 Введите текст, который хотите отправить пользователю:")
-    await state.set_state(SpamState.waiting_for_text)
+    # ✅ Проверяем, есть ли взаимный лайк
+    cursor.execute("SELECT id FROM likes WHERE who_chose = ? AND who_was_chosen = ?", (target_user_id, user_id))
+    mutual_like = cursor.fetchone()
+
+    if mutual_like:
+        # ✅ Удаляем лайки друг друга
+        cursor.execute("DELETE FROM likes WHERE who_chose = ? AND who_was_chosen = ?", (user_id, target_user_id))
+        cursor.execute("DELETE FROM likes WHERE who_chose = ? AND who_was_chosen = ?", (target_user_id, user_id))
+        conn.commit()
+
+        # ✅ Отправляем уведомления о мэтче
+        cursor.execute("SELECT username FROM users WHERE user_tg_id = ?", (target_user_id,))
+        target_username = cursor.fetchone()[0]
+
+        cursor.execute("SELECT username FROM users WHERE user_tg_id = ?", (user_id,))
+        user_username = cursor.fetchone()[0]
+
+        conn.close()
+
+        await callback.bot.send_message(user_id, f"🎉 У вас новый мэтч!\n @{target_username}")
+        await callback.bot.send_message(target_user_id, f"🎉 У вас новый мэтч!\n @{user_username}")
+
+    else:
+        # ✅ Записываем лайк, если не взаимный
+        cursor.execute("INSERT INTO likes (who_chose, who_was_chosen) VALUES (?, ?)", (user_id, target_user_id))
+        conn.commit()
+        conn.close()
+
+        # ✅ Запрашиваем текст от пользователя
+        await state.update_data(target_user_id=target_user_id)
+        await callback.message.answer("📩 Введите текст, который хотите отправить пользователю:")
+        await state.set_state(SpamState.waiting_for_text)
 
     await callback.answer()  # Закрываем callback-запрос
 
@@ -126,7 +156,7 @@ async def send_spam_message(message: types.Message, state: FSMContext):
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
 
-    # ✅ Исправленный запрос (добавлен LEFT JOIN для фото)
+    # ✅ Получаем анкету лайкнувшего
     cursor.execute("""
         SELECT u.first_name, u.date_of_birth, u.city, u.biography, p.photo 
         FROM users u
@@ -149,7 +179,7 @@ async def send_spam_message(message: types.Message, state: FSMContext):
 
     keyboard = get_browse_keyboard(user_id)  # Кнопки "Лайк" и "Дизлайк"
 
-    # Отправляем анкету + сообщение
+    # ✅ Отправляем анкету + сообщение
     if sender[4]:  # Фото
         await message.bot.send_photo(chat_id=target_user_id, photo=sender[4], caption=profile_text, reply_markup=keyboard)
     else:
