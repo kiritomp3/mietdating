@@ -1,6 +1,6 @@
 import os
 
-BOT_TOKEN = "7000170472:AAFbSx3qSEpdSlAxbhqaQxfi_-GB-9O0RY4"
+BOT_TOKEN = "7544081250:AAHhkAQ4ZbiR-FLUw7mcacCqSaBbJA4SEWw"
 
 # Данные для подключения к PostgreSQL
 DB_USER = "postgres"
