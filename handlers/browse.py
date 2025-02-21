@@ -25,7 +25,8 @@ class BrowseState(StatesGroup):
 browse_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="❤️ Лайк"), KeyboardButton(text="👎 Дизлайк")],
-        [KeyboardButton(text="🚀 Спам"), KeyboardButton(text="😴 Спать")],
+        [KeyboardButton(text="😴 Спать")],
+        #KeyboardButton(text="🚀 Спам"),
     ],
     resize_keyboard=True
 )

@@ -96,7 +96,7 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
         "👤 Имя": "first_name",
         "🎂 Дата рождения": "date_of_birth",
         "🏙 Город": "city",
-        "🖼 Фото": "photo",
+        "🖼 Фото": "photos",
         "📝 Описание": "biography"
     }
 
@@ -125,6 +125,7 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
 # Обработка нового значения
 @router.message(EditProfile.new_value)
 async def process_new_value(message: types.Message, state: FSMContext):
+    """Обработка нового значения анкеты"""
     user_id = message.from_user.id
     new_value = message.text
     logger.info(f"Пользователь {user_id} вводит новое значение: {new_value}")
@@ -143,19 +144,35 @@ async def process_new_value(message: types.Message, state: FSMContext):
             await message.answer("Некорректный формат даты! Введи в формате ГГГГ-ММ-ДД (например, 2000-05-15).")
             return
 
-    if field == "photo":
+    if field == "photos":
         if not message.photo:
             logger.warning(f"Пользователь {user_id} не отправил фото при изменении фото.")
             await message.answer("Пожалуйста, отправь фото.")
             return
+
         new_value = message.photo[-1].file_id
-        save_user_photo(user_id, new_value)
+
+        # ✅ Проверяем, есть ли уже фото у пользователя
+        cursor.execute("SELECT id FROM photos WHERE user_tg_id = ?", (user_id,))
+        existing_photo = cursor.fetchone()
+
+        if existing_photo:
+            # ✅ Если фото уже есть, обновляем его
+            cursor.execute("UPDATE photos SET photo = ? WHERE user_tg_id = ?", (new_value, user_id))
+            logger.info(f"✅ Фото пользователя {user_id} обновлено!")
+        else:
+            # ✅ Если фото нет, добавляем новое
+            cursor.execute("INSERT INTO photos (photo, user_tg_id) VALUES (?, ?)", (new_value, user_id))
+            logger.info(f"✅ Фото пользователя {user_id} добавлено!")
+
+        conn.commit()
+        conn.close()
         await message.answer("✅ Фото успешно обновлено!", reply_markup=main_menu)
+    
     else:
         cursor.execute(f"UPDATE users SET {field} = ? WHERE user_tg_id = ?", (new_value, user_id))
         conn.commit()
         conn.close()
-
         logger.info(f"Пользователь {user_id} успешно изменил {field} на {new_value}")
         await message.answer("✅ Анкета успешно обновлена!", reply_markup=main_menu)
 
