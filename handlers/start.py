@@ -15,6 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Register(StatesGroup):
+    sex = State()
+    looking_for = State()
+    relationship_type = State()
     name = State()
     birthdate = State()
     city = State()
