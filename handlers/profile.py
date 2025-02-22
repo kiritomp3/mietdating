@@ -152,10 +152,10 @@ async def process_new_value(message: types.Message, state: FSMContext):
             return
 
         # Проверяем наличие лица на фото
-        has_face = await has_face_in_photo(message.photo[-1])
-        if not has_face:
-            await message.answer("На фотографии не обнаружено лицо. Пожалуйста, отправь фото, где четко видно твое лицо.")
-            return
+        #has_face = await has_face_in_photo(message.photo[-1])
+        #if not has_face:
+         #   await message.answer("На фотографии не обнаружено лицо. Пожалуйста, отправь фото, где четко видно твое лицо.")
+          #  return
 
         new_value = message.photo[-1].file_id
 
