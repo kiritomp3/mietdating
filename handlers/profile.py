@@ -8,6 +8,7 @@ from db import DATABASE_PATH, save_user_photo, get_photo
 from keyboards import main_menu
 from aiogram.types import ReplyKeyboardRemove
 from datetime import datetime
+from utils.face_detection import has_face_in_photo
 
 router = Router()
 
@@ -148,6 +149,12 @@ async def process_new_value(message: types.Message, state: FSMContext):
         if not message.photo:
             logger.warning(f"Пользователь {user_id} не отправил фото при изменении фото.")
             await message.answer("Пожалуйста, отправь фото.")
+            return
+
+        # Проверяем наличие лица на фото
+        has_face = await has_face_in_photo(message.photo[-1])
+        if not has_face:
+            await message.answer("На фотографии не обнаружено лицо. Пожалуйста, отправь фото, где четко видно твое лицо.")
             return
 
         new_value = message.photo[-1].file_id

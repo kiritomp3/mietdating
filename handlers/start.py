@@ -7,6 +7,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from db import check_if_user_registered, register_user, save_user_photo, get_photo
 from keyboards import main_menu
+from utils.face_detection import has_face_in_photo
+
 
 router = Router()
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +92,12 @@ async def process_photo(message: types.Message, state: FSMContext):
         logger.warning(f"Пользователь {message.from_user.id} отправил не фото!")
         await message.answer("Пожалуйста, отправь именно фотографию.")
         return
-
+    # Проверяем наличие лица на фото
+    has_face = await has_face_in_photo(message.photo[-1])
+    if not has_face:
+        logger.warning(f"Пользователь {message.from_user.id} отправил фото без лица!")
+        await message.answer("На фотографии не обнаружено лицо. Пожалуйста, отправь фото, где четко видно твое лицо.")
+        return
     photo_id = message.photo[-1].file_id
     logger.info(f"Пользователь {message.from_user.id} загрузил фото: {photo_id}")
 
