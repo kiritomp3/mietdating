@@ -7,10 +7,9 @@ DATABASE_PATH = os.path.join("data", "dating_bot.db")
 logger = logging.getLogger("bot")
 
 
-def create_database() -> None:
-    """Создает базу данных и необходимые таблицы"""
-    create_dir()
 
+def create_database() -> None:
+    create_dir()
     conn = sqlite3.connect(DATABASE_PATH, uri=True)
     cursor = conn.cursor()
 
@@ -18,6 +17,9 @@ def create_database() -> None:
     create_photos_table(cursor)
     create_likes_table(cursor)
     create_viewed_profiles_table(cursor)
+
+    # Запускаем миграции для обновления схемы
+    run_migrations(cursor)
 
     conn.commit()
     conn.close()
@@ -42,8 +44,21 @@ def create_users_table(cursor) -> None:
         gender TEXT DEFAULT NULL,
         city TEXT DEFAULT NULL,
         biography TEXT DEFAULT NULL,
-        is_active INTEGER DEFAULT 1
+        is_active INTEGER DEFAULT 1,
+        marital_status TEXT DEFAULT 'Нет',
+        lp INTEGER DEFAULT NULL,
+        module TEXT DEFAULT NULL
     )""")
+    
+def run_migrations(cursor) -> None:
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "marital_status" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN marital_status TEXT DEFAULT 'Нет'")
+    if "lp" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN lp INTEGER")
+    if "module" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN module TEXT")
 
 
 def create_photos_table(cursor) -> None:
@@ -122,7 +137,7 @@ def get_random_profile(exclude_user_id: int) -> Optional[dict]:
 
     # ✅ Проверяем, какие анкеты уже просмотрены
     cursor.execute("""
-        SELECT u.user_tg_id, u.username, u.first_name, u.date_of_birth, u.city, u.biography, p.photo
+        SELECT u.user_tg_id, u.username, u.first_name, u.date_of_birth, u.city, u.biography, p.photo, u.lp, u.module
         FROM users u
         LEFT JOIN photos p ON u.user_tg_id = p.user_tg_id
         WHERE u.user_tg_id != ?
@@ -149,7 +164,9 @@ def get_random_profile(exclude_user_id: int) -> Optional[dict]:
             "date_of_birth": profile[3],
             "city": profile[4] if profile[4] else "Не указан",
             "biography": profile[5] if profile[5] else "Описание отсутствует",
-            "photo": profile[6]
+            "photo": profile[6],
+            "lp": profile[7],
+            "module": profile[8]
         }
 
     conn.close()
@@ -197,3 +214,6 @@ def add_viewed_profile(user_id: int, target_id: int) -> None:
     cursor.execute("INSERT INTO viewed_profiles (user_id, target_id) VALUES (?, ?)", (user_id, target_id))
     conn.commit()
     conn.close()
+
+
+

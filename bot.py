@@ -2,7 +2,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from config import BOT_TOKEN  
-from handlers import profile, start, browse, likes
+from handlers import profile, start, browse
 import utils
 
 # Настраиваем логирование

@@ -33,28 +33,35 @@ def calculate_age(birthdate):
 @router.message(lambda msg: msg.text == "Моя анкета")
 async def my_profile(message: types.Message):
     user_id = message.from_user.id
-    logger.info(f"Пользователь {user_id} запросил свою анкету.")
-
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT first_name, date_of_birth, city, biography FROM users WHERE user_tg_id = ?", (user_id,))
+    cursor.execute("""
+        SELECT first_name, date_of_birth, city, biography, lp, module
+        FROM users WHERE user_tg_id = ?
+    """, (user_id,))
     user = cursor.fetchone()
     conn.close()
 
     if user:
         age = calculate_age(user[1]) if user[1] else "Не указан"
         profile_text = (
-            f"{user[0]}, {age}, {user[2] if user[2] else 'Не указан'} — {user[3] if user[3] else 'Описание отсутствует'}"
+            f"{user[0]}, {age}, {user[2] if user[2] else 'Не указан'} — {user[3] if user[3] else 'Описание отсутствует'}\n"
+            f"ЛП: {user[4] if user[4] is not None else 'Не указан'}, Модуль: {user[5] if user[5] else 'Не указан'}"
         )
         photo = get_photo(user_id)
+        profile_menu = types.ReplyKeyboardMarkup(
+            keyboard=[
+                [types.KeyboardButton(text="✏ Изменить анкету"), types.KeyboardButton(text="🚫 Выключить анкету")],
+                [types.KeyboardButton(text="Главное меню")]
+            ],
+            resize_keyboard=True
+        )
         if photo:
-            await message.answer_photo(photo=photo, caption=profile_text, reply_markup=main_menu)
+            await message.answer_photo(photo=photo, caption=profile_text, reply_markup=profile_menu)
         else:
-            await message.answer(profile_text, reply_markup=main_menu)
+            await message.answer(profile_text, reply_markup=profile_menu)
     else:
-        logger.warning(f"Пользователь {user_id} пытался получить анкету, но она не найдена.")
         await message.answer("Анкета не найдена. Используй /start для создания анкеты.")
-
 
 # 🚫 Кнопка "Выключить анкету"
 @router.message(lambda msg: msg.text == "🚫 Выключить анкету")
@@ -80,7 +87,7 @@ async def edit_profile_start(message: types.Message, state: FSMContext):
         keyboard=[
             [types.KeyboardButton(text="👤 Имя"), types.KeyboardButton(text="🎂 Дата рождения")],
             [types.KeyboardButton(text="🏙 Город"), types.KeyboardButton(text="🖼 Фото")],
-            [types.KeyboardButton(text="📝 Описание")]
+            [types.KeyboardButton(text="📝 Описание"), types.KeyboardButton(text="📊 ЛП"), types.KeyboardButton(text="🧭 Модуль")]
         ],
         resize_keyboard=True
     )
@@ -94,12 +101,14 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
     logger.info(f"Пользователь {user_id} выбрал изменение параметра: {message.text}")
 
     field_mapping = {
-        "👤 Имя": "first_name",
-        "🎂 Дата рождения": "date_of_birth",
-        "🏙 Город": "city",
-        "🖼 Фото": "photos",
-        "📝 Описание": "biography"
-    }
+    "👤 Имя": "first_name",
+    "🎂 Дата рождения": "date_of_birth",
+    "🏙 Город": "city",
+    "🖼 Фото": "photos",
+    "📝 Описание": "biography",
+    "📊 ЛП": "lp",
+    "🧭 Модуль": "module"
+}
 
     if message.text == "❌ Отмена":
         logger.info(f"Пользователь {user_id} отменил изменение анкеты.")
@@ -126,61 +135,69 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
 # Обработка нового значения
 @router.message(EditProfile.new_value)
 async def process_new_value(message: types.Message, state: FSMContext):
-    """Обработка нового значения анкеты"""
     user_id = message.from_user.id
-    new_value = message.text
-    logger.info(f"Пользователь {user_id} вводит новое значение: {new_value}")
-
     user_data = await state.get_data()
     field = user_data["field"]
 
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
+    if field == "photos":
+        if not message.photo:
+            await message.answer("Пожалуйста, отправьте фото.")
+            return
+        new_value = message.photo[-1].file_id
+
+        # Проверяем, есть ли уже фото у пользователя
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM photos WHERE user_tg_id = ?", (user_id,))
+        existing_photo = cursor.fetchone()
+
+        if existing_photo:
+            cursor.execute("UPDATE photos SET photo = ? WHERE user_tg_id = ?", (new_value, user_id))
+            logger.info(f"Фото пользователя {user_id} обновлено!")
+        else:
+            cursor.execute("INSERT INTO photos (photo, user_tg_id) VALUES (?, ?)", (new_value, user_id))
+            logger.info(f"Фото пользователя {user_id} добавлено!")
+        conn.commit()
+        conn.close()
+        await message.answer("✅ Фото успешно обновлено!", reply_markup=main_menu)
+        await state.clear()
+        return
+
+    # Для остальных полей ожидаем текст
+    if not message.text:
+        await message.answer("Пожалуйста, введите корректное текстовое значение.")
+        return
+    new_value = message.text.strip()
 
     if field == "date_of_birth":
         try:
             new_value = datetime.strptime(new_value, "%Y-%m-%d").date()
         except ValueError:
             logger.error(f"Пользователь {user_id} ввел некорректную дату: {new_value}")
-            await message.answer("Некорректный формат даты! Введи в формате ГГГГ-ММ-ДД (например, 2000-05-15).")
+            await message.answer("Некорректный формат даты! Введите в формате ГГГГ-ММ-ДД (например, 2000-05-15).")
             return
 
-    if field == "photos":
-        if not message.photo:
-            logger.warning(f"Пользователь {user_id} не отправил фото при изменении фото.")
-            await message.answer("Пожалуйста, отправь фото.")
+    elif field == "lp":
+        try:
+            lp_value = int(new_value)
+            if lp_value < 1 or lp_value > 130:
+                raise ValueError
+            new_value = lp_value
+        except ValueError:
+            await message.answer("Пожалуйста, введите корректное число от 1 до 130.")
             return
 
-        # Проверяем наличие лица на фото
-        #has_face = await has_face_in_photo(message.photo[-1])
-        #if not has_face:
-         #   await message.answer("На фотографии не обнаружено лицо. Пожалуйста, отправь фото, где четко видно твое лицо.")
-          #  return
+    elif field == "module":
+        if new_value not in ["1", "2", "3", "Лес"]:
+            await message.answer("Пожалуйста, выберите один из вариантов: 1, 2, 3 или 'Лес'.")
+            return
 
-        new_value = message.photo[-1].file_id
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute(f"UPDATE users SET {field} = ? WHERE user_tg_id = ?", (new_value, user_id))
+    conn.commit()
+    conn.close()
 
-        # ✅ Проверяем, есть ли уже фото у пользователя
-        cursor.execute("SELECT id FROM photos WHERE user_tg_id = ?", (user_id,))
-        existing_photo = cursor.fetchone()
-
-        if existing_photo:
-            # ✅ Если фото уже есть, обновляем его
-            cursor.execute("UPDATE photos SET photo = ? WHERE user_tg_id = ?", (new_value, user_id))
-            logger.info(f"✅ Фото пользователя {user_id} обновлено!")
-        else:
-            # ✅ Если фото нет, добавляем новое
-            cursor.execute("INSERT INTO photos (photo, user_tg_id) VALUES (?, ?)", (new_value, user_id))
-            logger.info(f"✅ Фото пользователя {user_id} добавлено!")
-
-        conn.commit()
-        conn.close()
-        await message.answer("✅ Фото успешно обновлено!", reply_markup=main_menu)
-    
-    else:
-        cursor.execute(f"UPDATE users SET {field} = ? WHERE user_tg_id = ?", (new_value, user_id))
-        conn.commit()
-        conn.close()
-        logger.info(f"Пользователь {user_id} успешно изменил {field} на {new_value}")
-        await message.answer("✅ Анкета успешно обновлена!", reply_markup=main_menu)
-
+    logger.info(f"Пользователь {user_id} успешно изменил {field} на {new_value}")
+    await message.answer("✅ Анкета успешно обновлена!", reply_markup=main_menu)
     await state.clear()
