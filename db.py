@@ -1,37 +1,34 @@
 import os
 import sqlite3
 import logging
-from typing import Optional, List
+from typing import Optional
 
 DATABASE_PATH = os.path.join("data", "dating_bot.db")
 logger = logging.getLogger("bot")
-
-
 
 def create_database() -> None:
     create_dir()
     conn = sqlite3.connect(DATABASE_PATH, uri=True)
     cursor = conn.cursor()
 
+    # Создаем таблицы, если они отсутствуют
     create_users_table(cursor)
     create_photos_table(cursor)
     create_likes_table(cursor)
     create_viewed_profiles_table(cursor)
 
-    # Запускаем миграции для обновления схемы
+    # Запускаем миграции для всех таблиц
     run_migrations(cursor)
 
     conn.commit()
     conn.close()
     logger.info("✅ База данных успешно создана")
 
-
 def create_dir() -> None:
     """Создает папку для хранения БД, если она отсутствует"""
     dir_name = os.path.dirname(DATABASE_PATH)
     if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-
 
 def create_users_table(cursor) -> None:
     """Создает таблицу пользователей"""
@@ -49,17 +46,6 @@ def create_users_table(cursor) -> None:
         lp INTEGER DEFAULT NULL,
         module TEXT DEFAULT NULL
     )""")
-    
-def run_migrations(cursor) -> None:
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if "marital_status" not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN marital_status TEXT DEFAULT 'Нет'")
-    if "lp" not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN lp INTEGER")
-    if "module" not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN module TEXT")
-
 
 def create_photos_table(cursor) -> None:
     """Создает таблицу фотографий пользователей"""
@@ -69,7 +55,6 @@ def create_photos_table(cursor) -> None:
         user_tg_id INTEGER,
         FOREIGN KEY (user_tg_id) REFERENCES users (user_tg_id) ON DELETE CASCADE
     )""")
-
 
 def create_likes_table(cursor) -> None:
     """Создает таблицу лайков"""
@@ -82,7 +67,6 @@ def create_likes_table(cursor) -> None:
         FOREIGN KEY (who_was_chosen) REFERENCES users (user_tg_id) ON DELETE CASCADE
     )""")
 
-
 def create_viewed_profiles_table(cursor) -> None:
     """Создает таблицу просмотренных профилей"""
     cursor.execute("""CREATE TABLE IF NOT EXISTS viewed_profiles(
@@ -94,6 +78,45 @@ def create_viewed_profiles_table(cursor) -> None:
         FOREIGN KEY (target_id) REFERENCES users (user_tg_id) ON DELETE CASCADE
     )""")
 
+def run_migrations(cursor) -> None:
+    """Запускает миграцию для всех таблиц"""
+    migrate_users(cursor)
+    migrate_photos(cursor)
+    migrate_likes(cursor)
+    migrate_viewed_profiles(cursor)
+
+def migrate_users(cursor) -> None:
+    """Миграция таблицы users – добавление новых столбцов, если они отсутствуют"""
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "marital_status" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN marital_status TEXT DEFAULT 'Нет'")
+        logger.info("Добавлен столбец marital_status в таблицу users")
+    if "lp" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN lp INTEGER")
+        logger.info("Добавлен столбец lp в таблицу users")
+    if "module" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN module TEXT")
+        logger.info("Добавлен столбец module в таблицу users")
+
+def migrate_photos(cursor) -> None:
+    """Миграция таблицы photos – если в будущем появятся изменения, можно добавить проверку здесь"""
+    cursor.execute("PRAGMA table_info(photos)")
+    # Например, можно добавить новую колонку, если потребуется
+    # columns = [row[1] for row in cursor.fetchall()]
+    # if "new_column" not in columns:
+    #     cursor.execute("ALTER TABLE photos ADD COLUMN new_column TEXT")
+    logger.info("Таблица photos актуальна")
+
+def migrate_likes(cursor) -> None:
+    """Миграция таблицы likes – аналогично можно добавлять новые столбцы при необходимости"""
+    cursor.execute("PRAGMA table_info(likes)")
+    logger.info("Таблица likes актуальна")
+
+def migrate_viewed_profiles(cursor) -> None:
+    """Миграция таблицы viewed_profiles – для будущих изменений"""
+    cursor.execute("PRAGMA table_info(viewed_profiles)")
+    logger.info("Таблица viewed_profiles актуальна")
 
 # Создаем БД при первом запуске
 create_database()
@@ -105,9 +128,8 @@ def get_photo(user_tg_id: int) -> Optional[str]:
     cursor.execute("SELECT photo FROM photos WHERE user_tg_id = ?", (user_tg_id,))
     photo = cursor.fetchone()
     conn.close()
-
     if photo:
-        return photo[0]  # Возвращаем ID фото из Telegram (file_id)
+        return photo[0]
     return None
 
 def check_if_user_registered(user_tg_id: int) -> bool:
@@ -119,7 +141,6 @@ def check_if_user_registered(user_tg_id: int) -> bool:
     conn.close()
     return user is not None
 
-
 def register_user(user_tg_id: int, username: str, first_name: Optional[str] = None, date_of_birth: Optional[str] = None, city: Optional[str] = None, biography: Optional[str] = None) -> None:
     """Регистрирует нового пользователя"""
     conn = sqlite3.connect(DATABASE_PATH)
@@ -129,33 +150,26 @@ def register_user(user_tg_id: int, username: str, first_name: Optional[str] = No
     conn.commit()
     conn.close()
 
-
 def get_random_profile(exclude_user_id: int) -> Optional[dict]:
     """Выбирает случайный профиль, которого пользователь еще не смотрел"""
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-
-    # ✅ Проверяем, какие анкеты уже просмотрены
     cursor.execute("""
         SELECT u.user_tg_id, u.username, u.first_name, u.date_of_birth, u.city, u.biography, p.photo, u.lp, u.module
         FROM users u
         LEFT JOIN photos p ON u.user_tg_id = p.user_tg_id
         WHERE u.user_tg_id != ?
-        AND u.is_active = 1
-        AND u.user_tg_id NOT IN (
-            SELECT target_id FROM viewed_profiles WHERE user_id = ?
-        )
+          AND u.is_active = 1
+          AND u.user_tg_id NOT IN (
+              SELECT target_id FROM viewed_profiles WHERE user_id = ?
+          )
         ORDER BY RANDOM()
         LIMIT 1
     """, (exclude_user_id, exclude_user_id))
-
     profile = cursor.fetchone()
-
     if profile:
-        # ✅ Добавляем анкету в `viewed_profiles`
         cursor.execute("INSERT INTO viewed_profiles (user_id, target_id) VALUES (?, ?)", (exclude_user_id, profile[0]))
         conn.commit()
-
         conn.close()
         return {
             "id": profile[0],
@@ -168,10 +182,8 @@ def get_random_profile(exclude_user_id: int) -> Optional[dict]:
             "lp": profile[7],
             "module": profile[8]
         }
-
     conn.close()
     return None
-
 
 def save_user_photo(user_tg_id: int, photo: bytes) -> None:
     """Сохраняет фото пользователя"""
@@ -181,31 +193,22 @@ def save_user_photo(user_tg_id: int, photo: bytes) -> None:
     conn.commit()
     conn.close()
 
-
 def like_profile(user_id: int, liked_user_id: int) -> bool:
     """Ставит лайк пользователю и проверяет взаимность"""
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-
-    # Добавляем лайк
     cursor.execute("INSERT INTO likes (who_chose, who_was_chosen) VALUES (?, ?)", (user_id, liked_user_id))
     conn.commit()
-
-    # Проверяем, есть ли взаимный лайк
     cursor.execute("SELECT id FROM likes WHERE who_chose = ? AND who_was_chosen = ?", (liked_user_id, user_id))
     mutual_like = cursor.fetchone()
-
     if mutual_like:
-        # Обновляем статус взаимного лайка
         cursor.execute("UPDATE likes SET is_mutual = 1 WHERE who_chose = ? AND who_was_chosen = ?", (user_id, liked_user_id))
         cursor.execute("UPDATE likes SET is_mutual = 1 WHERE who_chose = ? AND who_was_chosen = ?", (liked_user_id, user_id))
         conn.commit()
         conn.close()
-        return True  # Взаимный лайк
-
+        return True
     conn.close()
-    return False  # Лайк без взаимности
-
+    return False
 
 def add_viewed_profile(user_id: int, target_id: int) -> None:
     """Добавляет просмотренный профиль в список"""
@@ -214,6 +217,3 @@ def add_viewed_profile(user_id: int, target_id: int) -> None:
     cursor.execute("INSERT INTO viewed_profiles (user_id, target_id) VALUES (?, ?)", (user_id, target_id))
     conn.commit()
     conn.close()
-
-
-
