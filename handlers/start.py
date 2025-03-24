@@ -310,7 +310,7 @@ async def my_profile(message: types.Message):
     user_id = message.from_user.id
     if not check_if_user_registered(user_id):
         await message.answer("Вы не зарегистрированы. Начинаем регистрацию.")
-        await start_cmd(message, state=None)  # Начинаем регистрацию
+        await start_cmd(message)  # Начинаем регистрацию
     else:
         # Получаем данные пользователя из базы данных
         conn = sqlite3.connect(DATABASE_PATH)
