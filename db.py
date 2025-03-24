@@ -217,3 +217,27 @@ def add_viewed_profile(user_id: int, target_id: int) -> None:
     cursor.execute("INSERT INTO viewed_profiles (user_id, target_id) VALUES (?, ?)", (user_id, target_id))
     conn.commit()
     conn.close()
+
+def get_profile(user_tg_id: int) -> Optional[dict]:
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.user_tg_id, u.first_name, u.date_of_birth, u.city, u.biography, p.photo, u.lp, u.module
+        FROM users u
+        LEFT JOIN photos p ON u.user_tg_id = p.user_tg_id
+        WHERE u.user_tg_id = ? AND u.is_active = 1
+    """, (user_tg_id,))
+    profile = cursor.fetchone()
+    conn.close()
+    if profile:
+        return {
+            "id": profile[0],  # user_tg_id как id
+            "first_name": profile[1],
+            "date_of_birth": profile[2],
+            "city": profile[3],
+            "biography": profile[4],
+            "photo": profile[5],
+            "lp": profile[6],
+            "module": profile[7]
+        }
+    return None

@@ -130,7 +130,7 @@ async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=user_name)
 
     # ✅ Запрашиваем дату рождения
-    await message.answer("Отлично! Теперь введи свою дату рождения (в формате ГГГГ.ММ.ДД):")
+    await message.answer("Отлично! Теперь введи свою дату рождения (в формате ДД.ММ.ГГГГ):")
 
     await state.set_state(Register.birthdate)
 
@@ -179,8 +179,7 @@ async def process_birthdate(message: types.Message, state: FSMContext):
     """Сохраняем дату рождения пользователя"""
     try:
         from datetime import datetime
-        # Изменяем формат даты на ГГГГ.ММ.ДД
-        birthdate = datetime.strptime(message.text.strip(), "%Y.%m.%d").date()
+        birthdate = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
         logger.info(f"Пользователь {message.from_user.id} ввел дату рождения: {birthdate}")
 
         await state.update_data(birthdate=str(birthdate))
@@ -191,7 +190,7 @@ async def process_birthdate(message: types.Message, state: FSMContext):
 
     except ValueError:
         logger.warning(f"Пользователь {message.from_user.id} ввел неверную дату: {message.text}")
-        await message.answer("Некорректный формат даты! Введи в формате ГГГГ.ММ.ДД (например, 2000.05.15).")
+        await message.answer("Некорректный формат даты! Введи в формате ДД.ММ.ГГГГ (например, 15.05.2000).")
 
 
 @router.message(Register.description)

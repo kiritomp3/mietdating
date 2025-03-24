@@ -85,9 +85,10 @@ async def edit_profile_start(message: types.Message, state: FSMContext):
 
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="👤 Имя"), types.KeyboardButton(text="🎂 Дата рождения")],
-            [types.KeyboardButton(text="🏙 Город"), types.KeyboardButton(text="🖼 Фото")],
-            [types.KeyboardButton(text="📝 Описание"), types.KeyboardButton(text="📊 ЛП"), types.KeyboardButton(text="🧭 Модуль")]
+            [types.KeyboardButton(text="Имя"), types.KeyboardButton(text="Дата рождения")],
+            [types.KeyboardButton(text="Город"), types.KeyboardButton(text="Фото")],
+            [types.KeyboardButton(text="Описание"), types.KeyboardButton(text="ЛП"), types.KeyboardButton(text="Модуль")],
+            [types.KeyboardButton(text="❌Отмена")]
         ],
         resize_keyboard=True
     )
@@ -101,16 +102,17 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
     logger.info(f"Пользователь {user_id} выбрал изменение параметра: {message.text}")
 
     field_mapping = {
-    "👤 Имя": "first_name",
-    "🎂 Дата рождения": "date_of_birth",
-    "🏙 Город": "city",
-    "🖼 Фото": "photos",
-    "📝 Описание": "biography",
-    "📊 ЛП": "lp",
-    "🧭 Модуль": "module"
+    "Имя": "first_name",
+    "Дата рождения": "date_of_birth",
+    "Город": "city",
+    "Фото": "photos",
+    "Описание": "biography",
+    "ЛП": "lp",
+    "Модуль": "module"
+    "❌Отмена"
 }
 
-    if message.text == "❌ Отмена":
+    if message.text == "❌Отмена":
         logger.info(f"Пользователь {user_id} отменил изменение анкеты.")
         await message.answer("Изменение анкеты отменено.", reply_markup=main_menu)
         await state.clear()
