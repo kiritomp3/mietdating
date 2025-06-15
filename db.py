@@ -241,3 +241,65 @@ def get_profile(user_tg_id: int) -> Optional[dict]:
             "module": profile[7]
         }
     return None
+
+def get_male_profile(user_tg_id: int) -> Optional[dict]:
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    query = """
+        SELECT u.user_tg_id, u.first_name, u.date_of_birth, u.city, u.biography, p.photo, u.lp, u.module
+        FROM users u
+        LEFT JOIN photos p ON u.user_tg_id = p.user_tg_id
+        WHERE u.user_tg_id != ? AND u.is_active = 1 AND u.gender = 'Мужчина'
+        AND u.user_tg_id NOT IN (SELECT who_was_chosen FROM likes WHERE who_chose = ?)
+        AND u.user_tg_id NOT IN (SELECT target_id FROM viewed_profiles WHERE user_id = ?)
+        ORDER BY RANDOM() LIMIT 1
+    """
+    cursor.execute(query, (user_tg_id, user_tg_id, user_tg_id))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user:
+        return {
+            "id": user["user_tg_id"],
+            "first_name": user["first_name"],
+            "date_of_birth": user["date_of_birth"],
+            "city": user["city"],
+            "biography": user["biography"],
+            "photo": user["photo"],
+            "lp": user["lp"],
+            "module": user["module"]
+        }
+    return None
+
+def get_female_profile(user_tg_id: int) -> Optional[dict]:
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    query = """
+        SELECT u.user_tg_id, u.first_name, u.date_of_birth, u.city, u.biography, p.photo, u.lp, u.module
+        FROM users u
+        LEFT JOIN photos p ON u.user_tg_id = p.user_tg_id
+        WHERE u.user_tg_id != ? AND u.is_active = 1 AND u.gender = 'Женщина'
+        AND u.user_tg_id NOT IN (SELECT who_was_chosen FROM likes WHERE who_chose = ?)
+        AND u.user_tg_id NOT IN (SELECT target_id FROM viewed_profiles WHERE user_id = ?)
+        ORDER BY RANDOM() LIMIT 1
+    """
+    cursor.execute(query, (user_tg_id, user_tg_id, user_tg_id))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user:
+        return {
+            "id": user["user_tg_id"],
+            "first_name": user["first_name"],
+            "date_of_birth": user["date_of_birth"],
+            "city": user["city"],
+            "biography": user["biography"],
+            "photo": user["photo"],
+            "lp": user["lp"],
+            "module": user["module"]
+        }
+    return None

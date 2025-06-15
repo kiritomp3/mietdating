@@ -3,7 +3,7 @@ import sqlite3
 import asyncio
 from aiogram import Router, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from db import DATABASE_PATH, get_random_profile, like_profile, add_viewed_profile, get_profile
+from db import DATABASE_PATH, get_male_profile, get_female_profile, like_profile, add_viewed_profile, get_profile
 from keyboards import main_menu
 from datetime import datetime
 from handlers.profile import calculate_age
@@ -33,7 +33,7 @@ browse_menu = ReplyKeyboardMarkup(
 # Начало просмотра анкет
 @router.message(lambda msg: msg.text == "Поиск")
 async def browse_profiles(message: types.Message, state: FSMContext):
-    """Начало просмотра анкет"""
+    """Начало просмотра анкет с фильтрацией по противоположному полу"""
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} начал просмотр анкет.")
 
@@ -41,20 +41,32 @@ async def browse_profiles(message: types.Message, state: FSMContext):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    # Проверяем, не женат ли пользователь
-    cursor.execute("SELECT is_active FROM users WHERE user_tg_id = ?", (user_id,))
+    # Проверяем, не женат ли пользователь и получаем его пол
+    cursor.execute("SELECT is_active, gender FROM users WHERE user_tg_id = ?", (user_id,))
     user_status = cursor.fetchone()
-    if user_status and user_status["is_active"] == 0:
+    if not user_status:
+        await message.answer("Ваш профиль не найден. Пожалуйста, зарегистрируйтесь.", reply_markup=main_menu)
+        conn.close()
+        return
+    if user_status["is_active"] == 0:
         await message.answer("Поиск анкет для вас недоступен, так как вы указали, что женаты/замужем.", reply_markup=main_menu)
         conn.close()
         return
 
-    # Получаем пользователей, которые лайкнули текущего пользователя
+    # Определяем пол текущего пользователя
+    user_gender = user_status["gender"]
+    logger.info(f"Пользователь {user_id} ({user_gender}) ищет анкеты противоположного пола")
+
+    # Получаем пользователей, которые лайкнули текущего пользователя, с учётом пола
+    target_gender = "Мужчина" if user_gender == "Женщина" else "Женщина"
     cursor.execute("""
-        SELECT who_chose FROM likes WHERE who_was_chosen = ?
+        SELECT l.who_chose
+        FROM likes l
+        JOIN users u ON l.who_chose = u.user_tg_id
+        WHERE l.who_was_chosen = ? AND u.gender = ?
         ORDER BY RANDOM()
         LIMIT 1
-    """, (user_id,))
+    """, (user_id, target_gender))
     liked_user = cursor.fetchone()
 
     if liked_user:
@@ -95,8 +107,8 @@ async def browse_profiles(message: types.Message, state: FSMContext):
             conn.close()
             return
 
-    # Если лайкнувшие отсутствуют, показываем случайные анкеты
-    user = get_random_profile(user_id)
+    # Если лайкнувшие отсутствуют, показываем случайные анкеты противоположного пола
+    user = get_female_profile(user_id) if user_gender == "Мужчина" else get_male_profile(user_id)
     if user:
         await state.update_data(current_profile=user)
         age = calculate_age(user["date_of_birth"]) if user["date_of_birth"] else "Не указан"
@@ -113,7 +125,7 @@ async def browse_profiles(message: types.Message, state: FSMContext):
 
         await state.set_state(BrowseState.browsing)
     else:
-        await message.answer("Доступные анкеты закончились.", reply_markup=main_menu)
+        await message.answer(f"Анкеты закончились.", reply_markup=main_menu)
 
     conn.close()
 
@@ -122,7 +134,6 @@ async def handle_interaction(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if data.get("is_single_view"):
         await state.clear()
-        await message.answer("Вы просмотрели профиль.", reply_markup=main_menu)
     else:
         await send_new_profile(message, state)
 
@@ -145,6 +156,18 @@ async def like_profile_action(message: types.Message, state: FSMContext):
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+
+    # Проверяем пол пользователей перед добавлением лайка
+    cursor.execute("SELECT gender FROM users WHERE user_tg_id = ?", (user_id,))
+    user_gender = cursor.fetchone()["gender"]
+    cursor.execute("SELECT gender FROM users WHERE user_tg_id = ?", (target_user_id,))
+    target_gender = cursor.fetchone()["gender"]
+
+    if (user_gender == "Мужчина" and target_gender != "Женщина") or (user_gender == "Женщина" and target_gender != "Мужчина"):
+        await message.answer("Лайк возможен только для анкет противоположного пола.")
+        await send_new_profile(message, state)
+        conn.close()
+        return
 
     cursor.execute("INSERT INTO likes (who_chose, who_was_chosen) VALUES (?, ?)", (user_id, target_user_id))
     conn.commit()
@@ -211,22 +234,36 @@ async def view_profile(query: CallbackQuery, state: FSMContext):
             await query.answer("Профиль не найден.", show_alert=True)
             return
 
+        # Получаем пол текущего пользователя
+        viewer_user_id = query.from_user.id
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT gender FROM users WHERE user_tg_id = ?", (viewer_user_id,))
+        viewer_gender = cursor.fetchone()["gender"]
+        target_gender = "Мужчина" if viewer_gender == "Женщина" else "Женщина"
+
+        # Проверяем, что профиль соответствует целевому полу
+        cursor.execute("SELECT gender FROM users WHERE user_tg_id = ?", (liker_user_id,))
+        liker_gender = cursor.fetchone()["gender"]
+        if liker_gender != target_gender:
+            await query.answer("Этот профиль не соответствует вашим предпочтениям.", show_alert=True)
+            conn.close()
+            return
+
         # Устанавливаем текущий профиль в состоянии и флаг для одиночного просмотра
         await state.update_data(current_profile=profile, is_single_view=True)
 
         # Устанавливаем состояние в режим просмотра
         await state.set_state(BrowseState.browsing)
 
-        # Получаем ID пользователя, который нажал кнопку
-        viewer_user_id = query.from_user.id
-
         # Формируем текст профиля
         age = calculate_age(profile["date_of_birth"]) if profile["date_of_birth"] else "Не указан"
         profile_text = (
             f"💌 Вы понравились:\n\n"
-            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography']}\n" \
+            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography']}\n"
             f"ЛП: {profile.get('lp', 'Не указан')}, Модуль: {profile.get('module', 'Не указан')}"
-            )
+        )
 
         # Отправляем профиль с клавиатурой для взаимодействия
         if profile["photo"]:
@@ -239,6 +276,7 @@ async def view_profile(query: CallbackQuery, state: FSMContext):
 
         # Отвечаем на callback-запрос, чтобы убрать индикатор загрузки
         await query.answer()
+        conn.close()
     except Exception as e:
         logging.error(f"Ошибка в view_profile: {e}")
         await query.answer("Произошла ошибка.", show_alert=True)
@@ -252,7 +290,17 @@ async def exit_browse_mode(message: types.Message, state: FSMContext):
 # Функция для отправки новой анкеты
 async def send_new_profile(message, state: FSMContext):
     user_id = message.from_user.id
-    user = get_random_profile(user_id)
+    
+    # Получаем пол текущего пользователя
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT gender FROM users WHERE user_tg_id = ?", (user_id,))
+    user_gender = cursor.fetchone()["gender"]
+    conn.close()
+
+    # Выбираем профиль противоположного пола
+    user = get_female_profile(user_id) if user_gender == "Мужчина" else get_male_profile(user_id)
     if user:
         await state.update_data(current_profile=user)
         age = calculate_age(user["date_of_birth"]) if user["date_of_birth"] else "Не указан"
@@ -265,4 +313,4 @@ async def send_new_profile(message, state: FSMContext):
         else:
             await message.answer(profile_text, reply_markup=browse_menu)
     else:
-        await message.answer("Доступные анкеты закончились.", reply_markup=main_menu)
+        await message.answer(f"Анкет {'женщин' if user_gender == 'Мужчина' else 'мужчин'} сейчас нет.", reply_markup=main_menu)
