@@ -2,7 +2,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from config import BOT_TOKEN  
-from handlers import profile, start, browse
+from handlers import profile, start, browse, other
 import utils
 
 # Настраиваем логирование
@@ -15,7 +15,7 @@ dp = Dispatcher()
 dp.include_router(start.router)
 dp.include_router(profile.router)
 dp.include_router(browse.router)
-
+dp.include_router(other.router)
 async def main():
     logging.info("Бот запущен! 🚀")
     

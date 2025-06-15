@@ -51,7 +51,7 @@ def create_photos_table(cursor) -> None:
     """Создает таблицу фотографий пользователей"""
     cursor.execute("""CREATE TABLE IF NOT EXISTS photos(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        photo BLOB,
+        photo TEXT,
         user_tg_id INTEGER,
         FOREIGN KEY (user_tg_id) REFERENCES users (user_tg_id) ON DELETE CASCADE
     )""")

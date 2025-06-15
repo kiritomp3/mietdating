@@ -96,12 +96,7 @@ async def edit_profile_start(message: types.Message, state: FSMContext):
     await state.set_state(EditProfile.choose_field)
 
 # Выбор параметра для изменения
-@router.message(EditProfile.choose_field)
-async def process_edit_choice(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    logger.info(f"Пользователь {user_id} выбрал изменение параметра: {message.text}")
-
-    field_mapping = {
+field_mapping = {
     "Имя": "first_name",
     "Дата рождения": "date_of_birth",
     "Город": "city",
@@ -109,8 +104,12 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
     "Описание": "biography",
     "ЛП": "lp",
     "Модуль": "module"
-    "❌Отмена"
 }
+
+@router.message(EditProfile.choose_field)
+async def process_edit_choice(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    logger.info(f"Пользователь {user_id} выбрал изменение параметра: {message.text}")
 
     if message.text == "❌Отмена":
         logger.info(f"Пользователь {user_id} отменил изменение анкеты.")
@@ -125,9 +124,9 @@ async def process_edit_choice(message: types.Message, state: FSMContext):
 
     await state.update_data(field=field_mapping[message.text])
     
-    if message.text == "🎂 Дата рождения":
+    if message.text == "Дата рождения":
         await message.answer("Введи новую дату рождения (в формате ГГГГ-ММ-ДД):")
-    elif message.text == "🖼 Фото":
+    elif message.text == "Фото":
         await message.answer("Отправь новое фото.")
     else:
         await message.answer(f"Введи новое значение для {message.text}:")
