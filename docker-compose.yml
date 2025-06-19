@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dating_bot
+    volumes:
+      - /var/lib/dating_bot/data:/app/data  # Монтируем директорию хоста в контейнер
+    environment:
+      - DATABASE_PATH=/app/data/dating_bot.db  # Указываем путь к базе данных внутри контейнера
+      - BOT_TOKEN=7544081250:AAHhkAQ4ZbiR-FLUw7mcacCqSaBbJA4SEWw
+    restart: unless-stopped
+    

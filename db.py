@@ -3,7 +3,7 @@ import sqlite3
 import logging
 from typing import Optional
 
-DATABASE_PATH = os.path.join("data", "dating_bot.db")
+DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join("data", "dating_bot.db"))
 logger = logging.getLogger("bot")
 
 def create_database() -> None:
