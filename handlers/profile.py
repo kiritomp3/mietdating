@@ -181,11 +181,11 @@ async def process_new_value(message: types.Message, state: FSMContext):
     elif field == "lp":
         try:
             lp_value = int(new_value)
-            if lp_value < 1 or lp_value > 130:
+            if lp_value < 1:
                 raise ValueError
             new_value = lp_value
         except ValueError:
-            await message.answer("Пожалуйста, введите корректное число от 1 до 130.")
+            await message.answer("Пожалуйста, введите корректное число от 1.")
             return
 
     elif field == "module":

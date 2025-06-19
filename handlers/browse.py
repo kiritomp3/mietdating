@@ -217,7 +217,20 @@ async def like_profile_action(message: types.Message, state: FSMContext):
 # Обработчик "Дизлайк"
 @router.message(lambda msg: msg.text == "👎")
 async def dislike_profile_action(message: types.Message, state: FSMContext):
-    logger.info(f"Пользователь {message.from_user.id} поставил дизлайк.")
+    user_id = message.from_user.id
+    data = await state.get_data()
+
+    if "current_profile" not in data:
+        await message.answer("🔄 Загрузка новой анкеты...")
+        await send_new_profile(message, state)
+        return
+
+    target_user_id = data["current_profile"]["id"]
+    logger.info(f"Пользователь {user_id} поставил дизлайк анкете {target_user_id}.")
+
+    # Добавляем анкету в просмотренные
+    add_viewed_profile(user_id, target_user_id)
+
     await handle_interaction(message, state)
 
 # Обработчик callback-запроса для кнопки "Посмотреть"
@@ -261,7 +274,7 @@ async def view_profile(query: CallbackQuery, state: FSMContext):
         age = calculate_age(profile["date_of_birth"]) if profile["date_of_birth"] else "Не указан"
         profile_text = (
             f"💌 Вы понравились:\n\n"
-            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography']}\n"
+            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography', "Описание отсутствует"]}\n"
             f"ЛП: {profile.get('lp', 'Не указан')}, Модуль: {profile.get('module', 'Не указан')}"
         )
 
