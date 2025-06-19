@@ -42,40 +42,45 @@ def create_users_table(cursor) -> None:
         city TEXT DEFAULT NULL,
         biography TEXT DEFAULT NULL,
         is_active INTEGER DEFAULT 1,
+        last_sent_profile INTEGER DEFAULT NULL,
+        likes_received INTEGER DEFAULT 0,
+        sex TEXT DEFAULT NULL,
+        looking_for TEXT DEFAULT NULL,
+        relationship_type TEXT DEFAULT NULL,
         marital_status TEXT DEFAULT 'Нет',
         lp INTEGER DEFAULT NULL,
         module TEXT DEFAULT NULL
     )""")
 
 def create_photos_table(cursor) -> None:
-    """Создает таблицу фотографий пользователей"""
+    """Создает таблицу фотографий"""
     cursor.execute("""CREATE TABLE IF NOT EXISTS photos(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        photo TEXT,
-        user_tg_id INTEGER,
-        FOREIGN KEY (user_tg_id) REFERENCES users (user_tg_id) ON DELETE CASCADE
+        photo TEXT NOT NULL,  -- Telegram file_id как строка
+        user_tg_id INTEGER NOT NULL,
+        FOREIGN KEY (user_tg_id) REFERENCES users(user_tg_id)
     )""")
 
 def create_likes_table(cursor) -> None:
     """Создает таблицу лайков"""
     cursor.execute("""CREATE TABLE IF NOT EXISTS likes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        who_chose INTEGER,
-        who_was_chosen INTEGER,
+        who_chose INTEGER NOT NULL,
+        who_was_chosen INTEGER NOT NULL,
         is_mutual INTEGER DEFAULT 0,
-        FOREIGN KEY (who_chose) REFERENCES users (user_tg_id) ON DELETE CASCADE,
-        FOREIGN KEY (who_was_chosen) REFERENCES users (user_tg_id) ON DELETE CASCADE
+        FOREIGN KEY (who_chose) REFERENCES users(user_tg_id),
+        FOREIGN KEY (who_was_chosen) REFERENCES users(user_tg_id)
     )""")
 
 def create_viewed_profiles_table(cursor) -> None:
     """Создает таблицу просмотренных профилей"""
     cursor.execute("""CREATE TABLE IF NOT EXISTS viewed_profiles(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        target_id INTEGER,
+        user_id INTEGER NOT NULL,
+        target_id INTEGER NOT NULL,
         viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (user_tg_id) ON DELETE CASCADE,
-        FOREIGN KEY (target_id) REFERENCES users (user_tg_id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES users(user_tg_id),
+        FOREIGN KEY (target_id) REFERENCES users(user_tg_id)
     )""")
 
 def run_migrations(cursor) -> None:
