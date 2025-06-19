@@ -224,10 +224,10 @@ async def process_marital_status(message: types.Message, state: FSMContext):
 async def process_lp(message: types.Message, state: FSMContext):
     try:
         lp_value = int(message.text.strip())
-        if lp_value < 1 or lp_value:
+        if lp_value < 1:
             raise ValueError
     except ValueError:
-        await message.answer("Пожалуйста, введите корректное число от 1 до 130.")
+        await message.answer("Пожалуйста, введите корректное число от 1.")
         return
 
     await state.update_data(lp=lp_value)
