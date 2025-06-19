@@ -274,7 +274,7 @@ async def view_profile(query: CallbackQuery, state: FSMContext):
         age = calculate_age(profile["date_of_birth"]) if profile["date_of_birth"] else "Не указан"
         profile_text = (
             f"💌 Вы понравились:\n\n"
-            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography', "Описание отсутствует"]}\n"
+            f"{profile['first_name']}, {age}, {profile['city']} — {profile['biography', 'Описание отсутствует']}\n"
             f"ЛП: {profile.get('lp', 'Не указан')}, Модуль: {profile.get('module', 'Не указан')}"
         )
 
