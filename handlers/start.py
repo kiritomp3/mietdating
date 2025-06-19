@@ -218,13 +218,13 @@ async def process_marital_status(message: types.Message, state: FSMContext):
         return
 
     await state.update_data(marital_status=message.text)
-    await message.answer("Ваш ЛП? (Введите число от 1 до 130):", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("Ваш ЛП? (Введите число от 1):", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(Register.lp)
 @router.message(Register.lp)
 async def process_lp(message: types.Message, state: FSMContext):
     try:
         lp_value = int(message.text.strip())
-        if lp_value < 1 or lp_value > 130:
+        if lp_value < 1 or lp_value:
             raise ValueError
     except ValueError:
         await message.answer("Пожалуйста, введите корректное число от 1 до 130.")

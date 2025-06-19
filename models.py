@@ -5,18 +5,18 @@ from db import Base
 class User(Base):
     __tablename__ = "users"
 
-    user_tg_id = Column(Integer, primary_key=True, index=True)  # Уникальный ID пользователя (Telegram ID)
-    username = Column(String, index=True)  # Telegram username
-    first_name = Column(String, nullable=True)  # Имя
+    id = Column(Integer, primary_key=True, index=True)  # Уникальный ID пользователя (Telegram ID)
+    username = Column(String, unique=True, index=True)  # Telegram username
+    name = Column(String, nullable=True)  # Имя (соответствует first_name)
     last_name = Column(String, nullable=True)  # Фамилия
-    date_of_birth = Column(Date, nullable=True)  # Дата рождения
+    birthdate = Column(Date, nullable=True)  # Дата рождения (соответствует date_of_birth)
     gender = Column(String, nullable=True)  # Пол
     city = Column(String, nullable=True)  # Город
-    biography = Column(String, nullable=True)  # Описание анкеты
+    description = Column(String, nullable=True)  # Описание (соответствует biography)
     is_active = Column(Boolean, default=True)  # Анкета включена/выключена
     last_sent_profile = Column(Integer, nullable=True)  # ID последнего отправленного профиля
     likes_received = Column(Integer, default=0)  # Количество полученных лайков
-    sex = Column(String, nullable=True)  # Пол пользователя (дублирует gender?)
+    sex = Column(String, nullable=True)  # Пол (дубликат gender?)
     looking_for = Column(String, nullable=True)  # Кого ищет пользователь
     relationship_type = Column(String, nullable=True)  # Тип отношений
     marital_status = Column(String, default="Нет")  # Семейное положение
@@ -26,8 +26,8 @@ class User(Base):
     # Связь с таблицей photos
     photos = relationship("Photo", back_populates="user", cascade="all, delete-orphan")
     # Связь с таблицами likes и viewed_profiles
-    likes_given = relationship("Like", foreign_keys="[Like.who_chose]", back_populates="user")
-    likes_received_rel = relationship("Like", foreign_keys="[Like.who_was_chosen]", back_populates="liked_user")
+    likes_given = relationship("Like", foreign_keys="[Like.user_id]", back_populates="user")
+    likes_received_rel = relationship("Like", foreign_keys="[Like.liked_user_id]", back_populates="liked_user")
     viewed_profiles = relationship("ViewedProfile", foreign_keys="[ViewedProfile.user_id]", back_populates="user")
     targeted_profiles = relationship("ViewedProfile", foreign_keys="[ViewedProfile.target_id]", back_populates="target")
 
@@ -36,7 +36,7 @@ class Photo(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)  # Уникальный ID записи
     photo = Column(String, nullable=False)  # Telegram file_id (хранится как строка)
-    user_tg_id = Column(Integer, ForeignKey("users.user_tg_id"), nullable=False)  # Внешний ключ на users
+    user_tg_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Внешний ключ на users
 
     # Связь с таблицей users
     user = relationship("User", back_populates="photos")
@@ -45,26 +45,26 @@ class Like(Base):
     __tablename__ = "likes"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)  # Уникальный ID лайка
-    who_chose = Column(Integer, ForeignKey("users.user_tg_id"), nullable=False)  # Кто поставил лайк
-    who_was_chosen = Column(Integer, ForeignKey("users.user_tg_id"), nullable=False)  # Кого лайкнули
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Кто поставил лайк
+    liked_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Кого лайкнули
     is_mutual = Column(Boolean, default=False)  # Взаимный ли лайк
 
     # Связь с таблицей users
-    user = relationship("User", foreign_keys=[who_chose], back_populates="likes_given")
-    liked_user = relationship("User", foreign_keys=[who_was_chosen], back_populates="likes_received_rel")
+    user = relationship("User", foreign_keys=[user_id], back_populates="likes_given")
+    liked_user = relationship("User", foreign_keys=[liked_user_id], back_populates="likes_received_rel")
 
-    # Индекс для оптимизации поиска лайков
+    # Индексы для оптимизации поиска лайков
     __table_args__ = (
-        Index('idx_who_chose', who_chose),
-        Index('idx_who_was_chosen', who_was_chosen),
+        Index('idx_user_id', user_id),
+        Index('idx_liked_user_id', liked_user_id),
     )
 
 class ViewedProfile(Base):
     __tablename__ = "viewed_profiles"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)  # Уникальный ID записи
-    user_id = Column(Integer, ForeignKey("users.user_tg_id"), nullable=False)  # Кто смотрел
-    target_id = Column(Integer, ForeignKey("users.user_tg_id"), nullable=False)  # Чей профиль смотрели
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Кто смотрел
+    target_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Чей профиль смотрели
     viewed_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)  # Время просмотра
 
     # Связь с таблицей users
