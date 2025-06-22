@@ -25,4 +25,4 @@ def clear_viewed_profiles():
     logger.info(f"🗑 Очищено записей в viewed_profiles: {deleted_rows}")
 
 # Добавляем задачу в планировщик
-scheduler.add_job(clear_viewed_profiles, "interval", minutes=1) 
+scheduler.add_job(clear_viewed_profiles, "interval", hours=1) 
